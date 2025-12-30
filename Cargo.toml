@@ -1,0 +1,42 @@
+[package]
+name = "bevy_transform_tools"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.83.0"
+description = "A transform gizmo plugin for Bevy with translation, rotation, and scale handles"
+license = "MIT"
+repository = "https://github.com/8th-Boundary/bevy_transform_tools"
+homepage = "https://github.com/8th-Boundary/bevy_transform_tools"
+documentation = "https://docs.rs/bevy_transform_tools"
+readme = "README.md"
+keywords = ["bevy", "gizmo", "transform", "editor", "gamedev"]
+categories = ["game-development", "graphics", "rendering"]
+authors = ["8th Boundary"]
+exclude = ["assets/", ".github/"]
+
+[dependencies]
+bevy = { version = "0.17", default-features = false, features = [
+    "bevy_asset",
+    "bevy_core_pipeline",
+    "bevy_gizmos",
+    "bevy_pbr",
+    "bevy_render",
+    "bevy_window",
+    "bevy_winit",
+    "x11",
+] }
+
+[dev-dependencies]
+bevy = { version = "0.17" }
+
+[[example]]
+name = "single_entity"
+path = "examples/single_entity.rs"
+
+[[example]]
+name = "multi_gizmos"
+path = "examples/multi_gizmos.rs"
+
+[[example]]
+name = "multiple_entities"
+path = "examples/multiple_entities.rs"
