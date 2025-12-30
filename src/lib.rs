@@ -8,7 +8,9 @@
 //!
 //! ```ignore
 //! use bevy::prelude::*;
-//! use bevy_transform_tools::{TransformGizmoPlugin, TransformGizmoCamera, TransformGizmoTarget};
+//! use bevy_transform_tools::{
+//!     TransformGizmoPlugin, TransformGizmoCamera, TransformGizmoTarget, GizmoActive,
+//! };
 //!
 //! fn main() {
 //!     App::new()
@@ -26,11 +28,11 @@
 //!         TransformGizmoCamera,
 //!     ));
 //!
-//!     // Entity that can be manipulated with the gizmo
+//!     // Entity with active gizmo
 //!     commands.spawn((
-//!         // ... your mesh and material ...
 //!         Transform::from_xyz(0.0, 1.0, 0.0),
 //!         TransformGizmoTarget,
+//!         GizmoActive,  // This entity has the gizmo
 //!     ));
 //! }
 //! ```
@@ -64,13 +66,27 @@ mod types;
 
 // Re-export all public types
 pub use types::{
-    AxisColors, AxisSnap, AxisToggles, GizmoAxis, GizmoOperation, GizmoStateColors,
+    AxisColors, AxisSnap, AxisToggles, GizmoActive, GizmoAxis, GizmoOperation, GizmoStateColors,
     TransformGizmoCamera, TransformGizmoDrag, TransformGizmoMode, TransformGizmoSnap,
     TransformGizmoSpace, TransformGizmoState, TransformGizmoStyle, TransformGizmoTarget,
 };
 
 use crate::draw::draw_gizmo;
 use crate::interaction::{begin_drag, configure_gizmos, drag_gizmo, end_drag, update_hovered_axis};
+
+/// Syncs [`GizmoActive`] component with [`TransformGizmoState::active_target`].
+///
+/// This system finds entities with both `TransformGizmoTarget` and `GizmoActive`,
+/// and sets the first one as the active target in the state resource.
+fn sync_active_target(
+    mut state: ResMut<TransformGizmoState>,
+    query: Query<Entity, (With<TransformGizmoTarget>, With<GizmoActive>)>,
+) {
+    // Find the first entity with GizmoActive
+    if let Some(entity) = query.iter().next() {
+        state.active_target = Some(entity);
+    }
+}
 
 /// Plugin that enables the transform gizmo system.
 ///
@@ -82,7 +98,7 @@ use crate::interaction::{begin_drag, configure_gizmos, drag_gizmo, end_drag, upd
 ///
 /// ```ignore
 /// use bevy::prelude::*;
-/// use bevy_transform_tools::TransformGizmoPlugin;
+/// use bevy_transform_tools::{TransformGizmoPlugin, TransformGizmoTarget, GizmoActive};
 ///
 /// App::new()
 ///     .add_plugins(DefaultPlugins)
@@ -100,6 +116,7 @@ impl Plugin for TransformGizmoPlugin {
             .add_systems(
                 Update,
                 (
+                    sync_active_target,
                     update_hovered_axis,
                     begin_drag,
                     drag_gizmo,

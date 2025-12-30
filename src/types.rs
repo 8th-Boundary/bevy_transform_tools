@@ -70,8 +70,8 @@ pub struct TransformGizmoCamera;
 
 /// Marks an entity as controllable by the transform gizmo.
 ///
-/// Entities with this component will have gizmo handles rendered at their
-/// position and can be manipulated via mouse interaction.
+/// Entities with this component can be manipulated via gizmo handles.
+/// Add [`GizmoActive`] to mark which target is currently selected.
 ///
 /// # Example
 ///
@@ -81,10 +81,36 @@ pub struct TransformGizmoCamera;
 ///     MeshMaterial3d(material),
 ///     Transform::from_xyz(0.0, 1.0, 0.0),
 ///     TransformGizmoTarget,
+///     GizmoActive,  // This entity is the active gizmo target
 /// ));
 /// ```
 #[derive(Component)]
 pub struct TransformGizmoTarget;
+
+/// Marks a [`TransformGizmoTarget`] as the currently active/selected target.
+///
+/// The gizmo will be rendered on entities that have both `TransformGizmoTarget`
+/// and `GizmoActive`. Only one entity should have this at a time; if multiple
+/// exist, the first one found is used.
+///
+/// # Example
+///
+/// ```ignore
+/// // Spawn an entity with the gizmo active
+/// commands.spawn((
+///     Mesh3d(mesh),
+///     MeshMaterial3d(material),
+///     Transform::from_xyz(0.0, 1.0, 0.0),
+///     TransformGizmoTarget,
+///     GizmoActive,
+/// ));
+///
+/// // To switch selection, remove GizmoActive from one entity and add to another:
+/// commands.entity(old_target).remove::<GizmoActive>();
+/// commands.entity(new_target).insert(GizmoActive);
+/// ```
+#[derive(Component)]
+pub struct GizmoActive;
 
 /// Identifies which axis (X, Y, or Z) a gizmo handle operates on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

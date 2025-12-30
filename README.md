@@ -1,5 +1,5 @@
-# Bevy Transform Tools
-# ![Bevy Transform Tools](./docs/_media/image.png)
+# bevy_transform_tools
+
 [![Crates.io](https://img.shields.io/crates/v/bevy_transform_tools.svg)](https://crates.io/crates/bevy_transform_tools)
 [![Docs.rs](https://docs.rs/bevy_transform_tools/badge.svg)](https://docs.rs/bevy_transform_tools)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -23,8 +23,6 @@ A transform gizmo plugin for [Bevy](https://bevyengine.org/) that provides inter
 
 ## Installation
 
-Add to your `Cargo.toml`:
-
 ```toml
 [dependencies]
 bevy_transform_tools = "0.1"
@@ -35,8 +33,7 @@ bevy_transform_tools = "0.1"
 ```rust
 use bevy::prelude::*;
 use bevy_transform_tools::{
-    TransformGizmoPlugin, TransformGizmoCamera, TransformGizmoTarget,
-    TransformGizmoState,
+    TransformGizmoPlugin, TransformGizmoCamera, TransformGizmoTarget, GizmoActive,
 };
 
 fn main() {
@@ -47,12 +44,7 @@ fn main() {
         .run();
 }
 
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut gizmo_state: ResMut<TransformGizmoState>,
-) {
+fn setup(mut commands: Commands) {
     // Camera with gizmo support
     commands.spawn((
         Camera3d::default(),
@@ -60,16 +52,23 @@ fn setup(
         TransformGizmoCamera,
     ));
 
-    // Entity that can be manipulated with the gizmo
-    let cube = commands.spawn((
-        Mesh3d(meshes.add(Cuboid::from_length(1.0))),
-        MeshMaterial3d(materials.add(Color::srgb(0.2, 0.7, 1.0))),
-        Transform::from_xyz(0.0, 0.5, 0.0),
+    // Entity with active gizmo - just add GizmoActive!
+    commands.spawn((
+        Transform::from_xyz(0.0, 1.0, 0.0),
         TransformGizmoTarget,
-    )).id();
+        GizmoActive,
+    ));
+}
+```
 
-    // Set this entity as the active gizmo target
-    gizmo_state.active_target = Some(cube);
+## Switching Selection
+
+To change which entity has the gizmo, move the `GizmoActive` component:
+
+```rust
+fn switch_target(mut commands: Commands, old: Entity, new: Entity) {
+    commands.entity(old).remove::<GizmoActive>();
+    commands.entity(new).insert(GizmoActive);
 }
 ```
 
@@ -77,31 +76,23 @@ fn setup(
 
 ### TransformGizmoState
 
-Control the gizmo mode and active target:
+Control the gizmo mode:
 
 ```rust
 fn switch_mode(mut state: ResMut<TransformGizmoState>) {
-    // Switch between modes
     state.mode = TransformGizmoMode::Rotate;
-
-    // Toggle coordinate space
     state.space = TransformGizmoSpace::World;
 }
 ```
 
 ### TransformGizmoStyle
 
-Customize appearance at runtime:
+Customize appearance:
 
 ```rust
 fn customize_style(mut style: ResMut<TransformGizmoStyle>) {
-    // Hide rotation handles
     style.show_rotate = false;
-
-    // Adjust axis length
     style.axis_length = 3.0;
-
-    // Change line width
     style.line_width = 2.0;
 }
 ```
@@ -112,27 +103,17 @@ Enable snap-to-grid:
 
 ```rust
 fn enable_snapping(mut snap: ResMut<TransformGizmoSnap>) {
-    // Snap translation to 0.5 unit increments
     snap.translate = AxisSnap::uniform(0.5);
-
-    // Snap rotation to 15 degree increments
     snap.rotate = AxisSnap::uniform(15f32.to_radians());
 }
 ```
 
 ## Examples
 
-Run the examples with:
-
 ```bash
-# Basic single-entity manipulation
-cargo run --example single_entity
-
-# Switching between multiple gizmo targets
-cargo run --example multi_gizmos
-
-# Multi-entity selection with shared pivot
-cargo run --example multiple_entities
+cargo run --example single_entity      # Basic usage
+cargo run --example multi_gizmos       # Switching targets
+cargo run --example multiple_entities  # Multi-selection with pivot
 ```
 
 ## License

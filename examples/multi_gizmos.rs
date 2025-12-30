@@ -1,19 +1,26 @@
-use bevy::mesh::PlaneMeshBuilder;
+//! Multiple gizmo targets example.
+//!
+//! Demonstrates switching between multiple entities with the gizmo.
+//! Use 1/2/3 to select cubes, T/R/S to switch modes, Q to toggle space.
+
 use bevy::prelude::*;
 use bevy_transform_tools::{
-    TransformGizmoCamera, TransformGizmoMode, TransformGizmoPlugin, TransformGizmoSpace,
-    TransformGizmoState, TransformGizmoTarget,
+    GizmoActive, TransformGizmoCamera, TransformGizmoMode, TransformGizmoPlugin,
+    TransformGizmoSpace, TransformGizmoState, TransformGizmoTarget,
 };
 
 #[derive(Component)]
 struct TargetIndex(u8);
 
+#[derive(Component)]
+struct Hud;
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugins(TransformGizmoPlugin)
-        .add_systems(Startup, (setup, setup_ui))
-        .add_systems(Update, (keyboard_gizmo_controls, select_target, update_hud))
+        .add_systems(Startup, setup)
+        .add_systems(Update, (keyboard_controls, select_target, update_hud))
         .run();
 }
 
@@ -21,74 +28,75 @@ fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut gizmo_state: ResMut<TransformGizmoState>,
 ) {
     // Camera
     commands.spawn((
         Camera3d::default(),
-        TransformGizmoCamera,
         Transform::from_xyz(8.0, 6.0, 12.0).looking_at(Vec3::ZERO, Vec3::Y),
+        TransformGizmoCamera,
     ));
 
     // Light
     commands.spawn((
         DirectionalLight {
             shadows_enabled: true,
-            ..Default::default()
+            ..default()
         },
         Transform::from_xyz(10.0, 15.0, 10.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 
     // Ground
-    let ground_mesh = meshes.add(PlaneMeshBuilder::from_size(Vec2::splat(30.0)));
-    let ground_material = materials.add(Color::srgb(0.2, 0.35, 0.18));
     commands.spawn((
-        Mesh3d(ground_mesh),
-        MeshMaterial3d(ground_material),
-        Transform::from_xyz(0.0, 0.0, 0.0),
+        Mesh3d(meshes.add(Plane3d::new(Vec3::Y, Vec2::splat(15.0)))),
+        MeshMaterial3d(materials.add(Color::srgb(0.2, 0.35, 0.18))),
     ));
 
-    let cube_mesh = meshes.add(Cuboid::from_length(1.5));
-
+    // Three cubes - first one starts active
+    let cube = meshes.add(Cuboid::from_length(1.5));
     let colors = [
         Color::srgb(0.9, 0.3, 0.3),
         Color::srgb(0.3, 0.9, 0.3),
         Color::srgb(0.3, 0.3, 0.9),
     ];
-
     let positions = [
         Vec3::new(-4.0, 0.75, 0.0),
         Vec3::new(0.0, 0.75, 0.0),
         Vec3::new(4.0, 0.75, 0.0),
     ];
 
-    let mut first_entity = None;
-
-    for (i, (color, position)) in colors.into_iter().zip(positions).enumerate() {
-        let material = materials.add(color);
-        let entity = commands
-            .spawn((
-                TransformGizmoTarget,
-                TargetIndex((i + 1) as u8),
-                Mesh3d(cube_mesh.clone()),
-                MeshMaterial3d(material),
-                Transform::from_translation(position),
-            ))
-            .id();
-
+    for (i, (color, pos)) in colors.into_iter().zip(positions).enumerate() {
+        let mut entity = commands.spawn((
+            Mesh3d(cube.clone()),
+            MeshMaterial3d(materials.add(color)),
+            Transform::from_translation(pos),
+            TransformGizmoTarget,
+            TargetIndex((i + 1) as u8),
+        ));
         if i == 0 {
-            first_entity = Some(entity);
+            entity.insert(GizmoActive);
         }
     }
 
-    gizmo_state.active_target = first_entity;
-    gizmo_state.mode = TransformGizmoMode::Translate;
+    // HUD
+    commands.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(10.0),
+            left: Val::Px(10.0),
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.7)),
+    )).with_children(|p| {
+        p.spawn((
+            Text::new(""),
+            TextFont { font_size: 14.0, ..default() },
+            TextColor(Color::WHITE),
+            Hud,
+        ));
+    });
 }
 
-fn keyboard_gizmo_controls(
-    keys: Res<ButtonInput<KeyCode>>,
-    mut state: ResMut<TransformGizmoState>,
-) {
+fn keyboard_controls(keys: Res<ButtonInput<KeyCode>>, mut state: ResMut<TransformGizmoState>) {
     if keys.just_pressed(KeyCode::KeyT) {
         state.mode = TransformGizmoMode::Translate;
     }
@@ -98,7 +106,7 @@ fn keyboard_gizmo_controls(
     if keys.just_pressed(KeyCode::KeyS) {
         state.mode = TransformGizmoMode::Scale;
     }
-    if keys.just_pressed(KeyCode::Space) || keys.just_pressed(KeyCode::KeyQ) {
+    if keys.just_pressed(KeyCode::KeyQ) {
         state.space = match state.space {
             TransformGizmoSpace::World => TransformGizmoSpace::Local,
             TransformGizmoSpace::Local => TransformGizmoSpace::World,
@@ -106,64 +114,53 @@ fn keyboard_gizmo_controls(
     }
 }
 
-/// Select which cube is controlled by the gizmo.
-/// 1, 2, 3 choose the respective colored cube.
+/// Switch active target with 1/2/3 keys.
 fn select_target(
     keys: Res<ButtonInput<KeyCode>>,
-    mut state: ResMut<TransformGizmoState>,
+    mut commands: Commands,
     targets: Query<(Entity, &TargetIndex), With<TransformGizmoTarget>>,
+    active: Query<Entity, With<GizmoActive>>,
 ) {
-    let mut desired_index = None;
-
-    if keys.just_pressed(KeyCode::Digit1) {
-        desired_index = Some(1);
+    let index = if keys.just_pressed(KeyCode::Digit1) {
+        1
     } else if keys.just_pressed(KeyCode::Digit2) {
-        desired_index = Some(2);
+        2
     } else if keys.just_pressed(KeyCode::Digit3) {
-        desired_index = Some(3);
-    }
-
-    let Some(index) = desired_index else {
+        3
+    } else {
         return;
     };
 
+    // Remove GizmoActive from current
+    for entity in &active {
+        commands.entity(entity).remove::<GizmoActive>();
+    }
+
+    // Add GizmoActive to selected
     for (entity, target_index) in &targets {
         if target_index.0 == index {
-            state.active_target = Some(entity);
+            commands.entity(entity).insert(GizmoActive);
             break;
         }
     }
 }
 
-#[derive(Component)]
-struct GizmoHud;
+fn update_hud(
+    state: Res<TransformGizmoState>,
+    active: Query<&TargetIndex, With<GizmoActive>>,
+    mut query: Query<&mut Text, With<Hud>>,
+) {
+    let Ok(mut text) = query.single_mut() else { return };
 
-fn setup_ui(mut commands: Commands) {
-    commands
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                top: Val::Px(10.0),
-                left: Val::Px(10.0),
-                ..Default::default()
-            },
-            BackgroundColor(Color::NONE),
-        ))
-        .with_children(|parent| {
-            parent.spawn((Text::new(""), TextColor(Color::WHITE), GizmoHud));
-        });
-}
+    let selected = active.iter().next().map_or(0, |t| t.0);
 
-fn update_hud(state: Res<TransformGizmoState>, mut query: Query<&mut Text, With<GizmoHud>>) {
-    let Some(mut text) = query.iter_mut().next() else {
-        return;
-    };
-
-    let value = format!(
-        "Transform Gizmo\nMode:  {mode}\nSpace: {space}\n\nControls:\nT - Translate\nR - Rotate\nS - Scale\nQ - Toggle World/Local\n1/2/3 - Switch active target\nLMB drag axis/ring to manipulate",
-        mode = state.mode,
-        space = state.space,
+    text.0 = format!(
+        "Mode: {} | Space: {}\nSelected: Cube {}\n\n\
+         [1/2/3] Select cube\n\
+         [T] Translate [R] Rotate [S] Scale\n\
+         [Q] Toggle World/Local",
+        state.mode,
+        state.space,
+        selected,
     );
-
-    text.0 = value;
 }
