@@ -1,16 +1,14 @@
 //! Multiple gizmo targets example.
 //!
-//! Demonstrates switching between multiple entities with the gizmo.
-//! Use 1/2/3 to select cubes, T/R/S to switch modes, Q to toggle space.
+//! Demonstrates multiple entities with the gizmo.
+//! The cubes use different rotations so world/local toggles are visible.
+//! Use T/R/S to toggle handles (and set the tool), Q to toggle space.
 
 use bevy::prelude::*;
 use bevy_transform_tools::{
-    GizmoActive, TransformGizmoCamera, TransformGizmoMode, TransformGizmoPlugin,
-    TransformGizmoSpace, TransformGizmoState, TransformGizmoTarget,
+    TransformGizmoCamera, TransformGizmoMode, TransformGizmoPlugin, TransformGizmoSpace,
+    TransformGizmoState, TransformGizmoStyle, TransformGizmoTarget,
 };
-
-#[derive(Component)]
-struct TargetIndex(u8);
 
 #[derive(Component)]
 struct Hud;
@@ -20,7 +18,7 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugins(TransformGizmoPlugin)
         .add_systems(Startup, setup)
-        .add_systems(Update, (keyboard_controls, select_target, update_hud))
+        .add_systems(Update, (keyboard_controls, update_hud))
         .run();
 }
 
@@ -63,18 +61,23 @@ fn setup(
         Vec3::new(0.0, 0.75, 0.0),
         Vec3::new(4.0, 0.75, 0.0),
     ];
+    let rotations = [
+        Quat::from_rotation_y(0.6),
+        Quat::from_rotation_x(-0.5),
+        Quat::from_rotation_z(0.7),
+    ];
 
-    for (i, (color, pos)) in colors.into_iter().zip(positions).enumerate() {
-        let mut entity = commands.spawn((
+    for ((color, pos), rotation) in colors.into_iter().zip(positions).zip(rotations) {
+        commands.spawn((
             Mesh3d(cube.clone()),
             MeshMaterial3d(materials.add(color)),
-            Transform::from_translation(pos),
+            Transform {
+                translation: pos,
+                rotation,
+                ..default()
+            },
             TransformGizmoTarget,
-            TargetIndex((i + 1) as u8),
         ));
-        if i == 0 {
-            entity.insert(GizmoActive);
-        }
     }
 
     // HUD
@@ -96,15 +99,22 @@ fn setup(
     });
 }
 
-fn keyboard_controls(keys: Res<ButtonInput<KeyCode>>, mut state: ResMut<TransformGizmoState>) {
+fn keyboard_controls(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut state: ResMut<TransformGizmoState>,
+    mut style: ResMut<TransformGizmoStyle>,
+) {
     if keys.just_pressed(KeyCode::KeyT) {
         state.mode = TransformGizmoMode::Translate;
+        style.show_translate = !style.show_translate;
     }
     if keys.just_pressed(KeyCode::KeyR) {
         state.mode = TransformGizmoMode::Rotate;
+        style.show_rotate = !style.show_rotate;
     }
     if keys.just_pressed(KeyCode::KeyS) {
         state.mode = TransformGizmoMode::Scale;
+        style.show_scale = !style.show_scale;
     }
     if keys.just_pressed(KeyCode::KeyQ) {
         state.space = match state.space {
@@ -114,53 +124,24 @@ fn keyboard_controls(keys: Res<ButtonInput<KeyCode>>, mut state: ResMut<Transfor
     }
 }
 
-/// Switch active target with 1/2/3 keys.
-fn select_target(
-    keys: Res<ButtonInput<KeyCode>>,
-    mut commands: Commands,
-    targets: Query<(Entity, &TargetIndex), With<TransformGizmoTarget>>,
-    active: Query<Entity, With<GizmoActive>>,
-) {
-    let index = if keys.just_pressed(KeyCode::Digit1) {
-        1
-    } else if keys.just_pressed(KeyCode::Digit2) {
-        2
-    } else if keys.just_pressed(KeyCode::Digit3) {
-        3
-    } else {
-        return;
-    };
-
-    // Remove GizmoActive from current
-    for entity in &active {
-        commands.entity(entity).remove::<GizmoActive>();
-    }
-
-    // Add GizmoActive to selected
-    for (entity, target_index) in &targets {
-        if target_index.0 == index {
-            commands.entity(entity).insert(GizmoActive);
-            break;
-        }
-    }
-}
-
 fn update_hud(
     state: Res<TransformGizmoState>,
-    active: Query<&TargetIndex, With<GizmoActive>>,
+    style: Res<TransformGizmoStyle>,
     mut query: Query<&mut Text, With<Hud>>,
 ) {
     let Ok(mut text) = query.single_mut() else { return };
 
-    let selected = active.iter().next().map_or(0, |t| t.0);
+    let on = |b: bool| if b { "on" } else { "off" };
 
     text.0 = format!(
-        "Mode: {} | Space: {}\nSelected: Cube {}\n\n\
-         [1/2/3] Select cube\n\
-         [T] Translate [R] Rotate [S] Scale\n\
-         [Q] Toggle World/Local",
+        "Tool: {} | Space: {}\n\
+         Handles: T({}) R({}) S({})\n\n\
+         [T/R/S] toggle handles (set tool)\n\
+         [Q] toggle world/local",
         state.mode,
         state.space,
-        selected,
+        on(style.show_translate),
+        on(style.show_rotate),
+        on(style.show_scale),
     );
 }

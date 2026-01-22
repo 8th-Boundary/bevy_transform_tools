@@ -1,4 +1,4 @@
-//! Transform gizmo plugin for Bevy 0.17.x.
+//! Transform gizmo plugin for Bevy 0.18.x.
 //!
 //! This crate provides a 3D transform gizmo for manipulating entity transforms
 //! in Bevy applications. It supports translation, rotation, and scaling with

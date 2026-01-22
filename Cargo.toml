@@ -1,6 +1,6 @@
 [package]
 name = "bevy_transform_tools"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.83.0"
 description = "A transform gizmo plugin for Bevy with translation, rotation, and scale handles"
@@ -15,7 +15,7 @@ authors = ["8th Boundary"]
 exclude = ["assets/", ".github/"]
 
 [dependencies]
-bevy = { version = "0.17", default-features = false, features = [
+bevy = { version = "0.18", default-features = false, features = [
     "bevy_asset",
     "bevy_core_pipeline",
     "bevy_gizmos",
@@ -27,7 +27,7 @@ bevy = { version = "0.17", default-features = false, features = [
 ] }
 
 [dev-dependencies]
-bevy = { version = "0.17" }
+bevy = { version = "0.18" }
 
 [[example]]
 name = "single_entity"

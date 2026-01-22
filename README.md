@@ -17,15 +17,16 @@ A transform gizmo plugin for [Bevy](https://bevyengine.org/) that provides inter
 
 ## Bevy Compatibility
 
-| bevy_transform_tools | Bevy   |
-|---------------------|--------|
-| 0.1                 | 0.17   |
+| bevy_transform_tools version | Supported Bevy version |
+|-----------------------------|------------------------|
+| 0.2.0                       | 0.18.x                 |
+| 0.1.0                       | 0.17.x                 |
 
 ## Installation
 
 ```toml
 [dependencies]
-bevy_transform_tools = "0.1"
+bevy_transform_tools = "0.2"
 ```
 
 ## Quick Start
@@ -112,7 +113,7 @@ fn enable_snapping(mut snap: ResMut<TransformGizmoSnap>) {
 
 ```bash
 cargo run --example single_entity      # Basic usage
-cargo run --example multi_gizmos       # Switching targets
+cargo run --example multi_gizmos       # Multiple gizmo targets
 cargo run --example multiple_entities  # Multi-selection with pivot
 ```
 
