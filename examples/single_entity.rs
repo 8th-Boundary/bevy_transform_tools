@@ -58,22 +58,27 @@ fn setup(
     ));
 
     // HUD
-    commands.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            top: Val::Px(10.0),
-            left: Val::Px(10.0),
-            ..default()
-        },
-        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.7)),
-    )).with_children(|p| {
-        p.spawn((
-            Text::new(""),
-            TextFont { font_size: 14.0, ..default() },
-            TextColor(Color::WHITE),
-            Hud,
-        ));
-    });
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(10.0),
+                left: Val::Px(10.0),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.7)),
+        ))
+        .with_children(|p| {
+            p.spawn((
+                Text::new(""),
+                TextFont {
+                    font_size: 14.0,
+                    ..default()
+                },
+                TextColor(Color::WHITE),
+                Hud,
+            ));
+        });
 }
 
 fn keyboard_controls(
@@ -106,7 +111,9 @@ fn update_hud(
     style: Res<TransformGizmoStyle>,
     mut query: Query<&mut Text, With<Hud>>,
 ) {
-    let Ok(mut text) = query.single_mut() else { return };
+    let Ok(mut text) = query.single_mut() else {
+        return;
+    };
 
     let on = |b: bool| if b { "on" } else { "off" };
 

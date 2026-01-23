@@ -14,12 +14,12 @@
 //! - B: Toggle scale snap
 
 use bevy::prelude::*;
-use std::{collections::HashMap, fmt};
 use bevy_transform_tools::{
     GizmoActive, TransformGizmoCamera, TransformGizmoMode, TransformGizmoPlugin,
     TransformGizmoSnap, TransformGizmoSpace, TransformGizmoState, TransformGizmoStyle,
     TransformGizmoTarget,
 };
+use std::{collections::HashMap, fmt};
 
 #[derive(Component)]
 struct TargetIndex(u8);
@@ -40,18 +40,15 @@ struct Hud;
 struct Selection(Vec<Entity>);
 
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Default)]
 enum PivotMode {
     First,
     Last,
+    #[default]
     Centroid,
     KeepOffset,
 }
 
-impl Default for PivotMode {
-    fn default() -> Self {
-        PivotMode::Centroid
-    }
-}
 
 impl PivotMode {
     fn next(self) -> Self {
@@ -99,9 +96,21 @@ const SCALE_EPS: f32 = 1e-6;
 
 fn safe_div_vec3(value: Vec3, denom: Vec3) -> Vec3 {
     Vec3::new(
-        if denom.x.abs() > SCALE_EPS { value.x / denom.x } else { 0.0 },
-        if denom.y.abs() > SCALE_EPS { value.y / denom.y } else { 0.0 },
-        if denom.z.abs() > SCALE_EPS { value.z / denom.z } else { 0.0 },
+        if denom.x.abs() > SCALE_EPS {
+            value.x / denom.x
+        } else {
+            0.0
+        },
+        if denom.y.abs() > SCALE_EPS {
+            value.y / denom.y
+        } else {
+            0.0
+        },
+        if denom.z.abs() > SCALE_EPS {
+            value.z / denom.z
+        } else {
+            0.0
+        },
     )
 }
 
@@ -141,7 +150,13 @@ fn main() {
         .add_systems(Startup, setup)
         .add_systems(
             Update,
-            (keyboard_controls, selection_input, update_pivot, apply_pivot_delta, update_hud),
+            (
+                keyboard_controls,
+                selection_input,
+                update_pivot,
+                apply_pivot_delta,
+                update_hud,
+            ),
         )
         .run();
 }
@@ -206,22 +221,27 @@ fn setup(
     ));
 
     // HUD
-    commands.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            top: Val::Px(10.0),
-            left: Val::Px(10.0),
-            ..default()
-        },
-        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.7)),
-    )).with_children(|p| {
-        p.spawn((
-            Text::new(""),
-            TextFont { font_size: 14.0, ..default() },
-            TextColor(Color::WHITE),
-            Hud,
-        ));
-    });
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(10.0),
+                left: Val::Px(10.0),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.7)),
+        ))
+        .with_children(|p| {
+            p.spawn((
+                Text::new(""),
+                TextFont {
+                    font_size: 14.0,
+                    ..default()
+                },
+                TextColor(Color::WHITE),
+                Hud,
+            ));
+        });
 }
 
 fn keyboard_controls(
@@ -485,7 +505,11 @@ fn apply_pivot_delta(
     for &entity in &selection.0 {
         if let Ok((_entity, mut t)) = q.get_mut(entity) {
             let mut offset = t.translation - old_p;
-            offset = Vec3::new(offset.x * delta_s.x, offset.y * delta_s.y, offset.z * delta_s.z);
+            offset = Vec3::new(
+                offset.x * delta_s.x,
+                offset.y * delta_s.y,
+                offset.z * delta_s.z,
+            );
             offset = delta_r * offset;
             t.translation = new_p + offset;
             t.rotation = delta_r * t.rotation;
@@ -504,7 +528,9 @@ fn update_hud(
     pivot_mode: Res<PivotMode>,
     mut query: Query<&mut Text, With<Hud>>,
 ) {
-    let Ok(mut text) = query.single_mut() else { return };
+    let Ok(mut text) = query.single_mut() else {
+        return;
+    };
 
     let on = |b: bool| if b { "on" } else { "off" };
 
