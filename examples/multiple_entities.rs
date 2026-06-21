@@ -36,11 +36,13 @@ struct GizmoPivot;
 #[derive(Component)]
 struct Hud;
 
+type PivotOnly = (With<GizmoPivot>, Without<Selectable>);
+type SelectableOnly = (With<Selectable>, Without<GizmoPivot>);
+
 #[derive(Resource, Default)]
 struct Selection(Vec<Entity>);
 
-#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq, Default)]
 enum PivotMode {
     First,
     Last,
@@ -48,7 +50,6 @@ enum PivotMode {
     Centroid,
     KeepOffset,
 }
-
 
 impl PivotMode {
     fn next(self) -> Self {
@@ -151,7 +152,9 @@ fn main() {
         .add_systems(
             Update,
             (
-                keyboard_controls,
+                handle_mode_keys,
+                handle_pivot_mode_key,
+                handle_snap_keys,
                 selection_input,
                 update_pivot,
                 apply_pivot_delta,
@@ -176,7 +179,7 @@ fn setup(
     // Light
     commands.spawn((
         DirectionalLight {
-            shadows_enabled: true,
+            shadow_maps_enabled: true,
             illuminance: 5000.0,
             ..default()
         },
@@ -235,7 +238,7 @@ fn setup(
             p.spawn((
                 Text::new(""),
                 TextFont {
-                    font_size: 14.0,
+                    font_size: FontSize::Px(14.0),
                     ..default()
                 },
                 TextColor(Color::WHITE),
@@ -244,18 +247,11 @@ fn setup(
         });
 }
 
-fn keyboard_controls(
+fn handle_mode_keys(
     keys: Res<ButtonInput<KeyCode>>,
     mut state: ResMut<TransformGizmoState>,
     mut style: ResMut<TransformGizmoStyle>,
-    mut snap: ResMut<TransformGizmoSnap>,
-    mut pivot_mode: ResMut<PivotMode>,
-    selection: Res<Selection>,
-    mut offsets: ResMut<PivotOffsets>,
-    pivot_query: Query<&Transform, With<GizmoPivot>>,
-    targets: Query<(Entity, &Transform), With<Selectable>>,
 ) {
-    // Mode + toggle visibility
     if keys.just_pressed(KeyCode::KeyT) {
         state.mode = TransformGizmoMode::Translate;
         style.show_translate = !style.show_translate;
@@ -274,6 +270,16 @@ fn keyboard_controls(
             TransformGizmoSpace::Local => TransformGizmoSpace::World,
         };
     }
+}
+
+fn handle_pivot_mode_key(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut pivot_mode: ResMut<PivotMode>,
+    selection: Res<Selection>,
+    mut offsets: ResMut<PivotOffsets>,
+    pivot_query: Query<&Transform, PivotOnly>,
+    targets: Query<(Entity, &Transform), SelectableOnly>,
+) {
     if keys.just_pressed(KeyCode::KeyP) {
         *pivot_mode = pivot_mode.next();
         if matches!(*pivot_mode, PivotMode::KeepOffset) {
@@ -289,8 +295,9 @@ fn keyboard_controls(
             offsets.0.clear();
         }
     }
+}
 
-    // Translate snap
+fn handle_snap_keys(keys: Res<ButtonInput<KeyCode>>, mut snap: ResMut<TransformGizmoSnap>) {
     if keys.just_pressed(KeyCode::KeyZ) {
         snap.translate.x = snap.translate.x.map_or(Some(0.5), |_| None);
     }
@@ -301,7 +308,6 @@ fn keyboard_controls(
         snap.translate.z = snap.translate.z.map_or(Some(0.5), |_| None);
     }
 
-    // Rotate snap (15 degrees)
     if keys.just_pressed(KeyCode::KeyV) {
         let val = snap.rotate.x.map_or(Some(15f32.to_radians()), |_| None);
         snap.rotate.x = val;
@@ -324,7 +330,7 @@ fn selection_input(
     mut selection: ResMut<Selection>,
     mut offsets: ResMut<PivotOffsets>,
     mut commands: Commands,
-    pivot_query: Query<&Transform, With<GizmoPivot>>,
+    pivot_query: Query<&Transform, PivotOnly>,
     targets: Query<(Entity, &TargetIndex, &Transform), With<Selectable>>,
 ) {
     let index = if keys.just_pressed(KeyCode::Digit1) {
@@ -395,10 +401,8 @@ fn update_pivot(
     selection: Res<Selection>,
     state: Res<TransformGizmoState>,
     pivot_mode: Res<PivotMode>,
-    mut set: ParamSet<(
-        Query<&mut Transform, With<GizmoPivot>>,
-        Query<&Transform, With<Selectable>>,
-    )>,
+    mut pivots: Query<&mut Transform, PivotOnly>,
+    targets: Query<&Transform, SelectableOnly>,
 ) {
     if state.drag.is_some() || selection.0.is_empty() {
         return;
@@ -409,22 +413,21 @@ fn update_pivot(
     }
 
     let target = {
-        let q = set.p1();
         match *pivot_mode {
             PivotMode::First => selection
                 .0
                 .iter()
-                .find_map(|e| q.get(*e).ok().map(|t| t.translation)),
+                .find_map(|e| targets.get(*e).ok().map(|t| t.translation)),
             PivotMode::Last => selection
                 .0
                 .iter()
                 .rev()
-                .find_map(|e| q.get(*e).ok().map(|t| t.translation)),
+                .find_map(|e| targets.get(*e).ok().map(|t| t.translation)),
             PivotMode::Centroid => {
                 let mut sum = Vec3::ZERO;
                 let mut count = 0usize;
                 for entity in &selection.0 {
-                    if let Ok(t) = q.get(*entity) {
+                    if let Ok(t) = targets.get(*entity) {
                         sum += t.translation;
                         count += 1;
                     }
@@ -439,7 +442,7 @@ fn update_pivot(
         }
     };
 
-    if let (Some(pos), Some(mut pivot)) = (target, set.p0().iter_mut().next()) {
+    if let (Some(pos), Some(mut pivot)) = (target, pivots.iter_mut().next()) {
         pivot.translation = pos;
     }
 }
@@ -450,14 +453,13 @@ fn apply_pivot_delta(
     pivot_mode: Res<PivotMode>,
     mut offsets: ResMut<PivotOffsets>,
     mut history: ResMut<PivotHistory>,
-    mut set: ParamSet<(
-        Query<&Transform, With<GizmoPivot>>,
-        Query<(Entity, &mut Transform), With<Selectable>>,
-    )>,
+    pivots: Query<&Transform, PivotOnly>,
+    mut targets: Query<(Entity, &mut Transform), SelectableOnly>,
 ) {
     let current = {
-        let q = set.p0();
-        let Some(pivot) = q.iter().next() else { return };
+        let Some(pivot) = pivots.iter().next() else {
+            return;
+        };
         PivotFrame {
             translation: pivot.translation,
             rotation: pivot.rotation,
@@ -476,9 +478,8 @@ fn apply_pivot_delta(
             rotation: current.rotation,
             scale: current.scale,
         };
-        let mut q = set.p1();
         for &entity in &selection.0 {
-            if let Ok((_entity, mut t)) = q.get_mut(entity) {
+            if let Ok((_entity, mut t)) = targets.get_mut(entity) {
                 let offset = offsets.0.get(&entity).copied().unwrap_or_else(|| {
                     let captured = capture_offset(&pivot, &t);
                     offsets.0.insert(entity, captured);
@@ -501,9 +502,8 @@ fn apply_pivot_delta(
     let old_p = last.translation;
     let new_p = current.translation;
 
-    let mut q = set.p1();
     for &entity in &selection.0 {
-        if let Ok((_entity, mut t)) = q.get_mut(entity) {
+        if let Ok((_entity, mut t)) = targets.get_mut(entity) {
             let mut offset = t.translation - old_p;
             offset = Vec3::new(
                 offset.x * delta_s.x,

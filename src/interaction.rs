@@ -307,7 +307,7 @@ pub fn begin_drag(
     mut state: ResMut<TransformGizmoState>,
     cameras: Query<(&Camera, &GlobalTransform), With<TransformGizmoCamera>>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    targets: Query<(Entity, &GlobalTransform, &mut Transform), With<TransformGizmoTarget>>,
+    targets: Query<(Entity, &GlobalTransform, &Transform), With<TransformGizmoTarget>>,
 ) {
     if !buttons.just_pressed(MouseButton::Left) {
         return;
@@ -340,7 +340,7 @@ pub fn begin_drag(
     let Some(target_entity) = state.active_target else {
         return;
     };
-    let Ok((entity, global, _local_transform)) = targets.get(target_entity) else {
+    let Ok((entity, global, local_transform)) = targets.get(target_entity) else {
         return;
     };
 
@@ -452,6 +452,8 @@ pub fn begin_drag(
         start_translation: global.translation(),
         start_rotation: global.rotation(),
         start_scale: global.to_scale_rotation_translation().0,
+        start_local_translation: local_transform.translation,
+        start_local_scale: local_transform.scale,
         start_t,
         start_vector,
     });
@@ -464,7 +466,8 @@ pub fn drag_gizmo(
     snap: Res<TransformGizmoSnap>,
     cameras: Query<(&Camera, &GlobalTransform), With<TransformGizmoCamera>>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    mut targets: Query<&mut Transform, With<TransformGizmoTarget>>,
+    mut targets: Query<(&mut Transform, Option<&ChildOf>), With<TransformGizmoTarget>>,
+    global_transforms: Query<&GlobalTransform>,
 ) {
     let Some(drag) = state.drag.as_mut() else {
         return;
@@ -487,9 +490,10 @@ pub fn drag_gizmo(
         return;
     };
 
-    let Ok(mut transform) = targets.get_mut(drag.target) else {
+    let Ok((mut transform, parent)) = targets.get_mut(drag.target) else {
         return;
     };
+    let parent_global = parent.and_then(|parent| global_transforms.get(parent.parent()).ok());
 
     let hit_point =
         ray_plane_intersection(&ray, drag.plane_origin, drag.plane_normal).unwrap_or(drag.origin);
@@ -504,7 +508,9 @@ pub fn drag_gizmo(
                     delta = (delta / step).round() * step;
                 }
             }
-            transform.translation = drag.start_translation + delta * drag.axis_dir;
+            let world_delta = delta * drag.axis_dir;
+            transform.translation =
+                drag.start_local_translation + world_vector_to_local(parent_global, world_delta);
         }
         GizmoOperation::TranslatePlane => {
             let n = drag.plane_normal;
@@ -526,13 +532,14 @@ pub fn drag_gizmo(
             }
             delta = drag.plane_dir1 * u + drag.plane_dir2 * w;
 
-            transform.translation = drag.start_translation + delta;
+            transform.translation =
+                drag.start_local_translation + world_vector_to_local(parent_global, delta);
         }
         GizmoOperation::ScaleAxis => {
             let t = v.dot(drag.axis_dir);
             // Guard against division by zero when start_t is near zero
             let delta = (t - drag.start_t) / drag.start_t.max(MIN_SCALE_DIVISOR);
-            let mut scale = drag.start_scale;
+            let mut scale = drag.start_local_scale;
             match drag.axis {
                 GizmoAxis::X => scale.x *= snap_scale(scale.x, delta, snap.scale.get(GizmoAxis::X)),
                 GizmoAxis::Y => scale.y *= snap_scale(scale.y, delta, snap.scale.get(GizmoAxis::Y)),
@@ -547,7 +554,7 @@ pub fn drag_gizmo(
             } else {
                 1.0
             };
-            let base = drag.start_scale;
+            let base = drag.start_local_scale;
             let snap_step = snap.scale.get(GizmoAxis::X).unwrap_or(0.0);
             let snapped_factor = if snap_step > 0.0 {
                 let target = base.x * factor;
@@ -575,9 +582,18 @@ pub fn drag_gizmo(
                 }
             }
             let delta_rot = Quat::from_axis_angle(drag.axis_dir, delta_angle);
-            transform.rotation = delta_rot * drag.start_rotation;
+            let world_rotation = delta_rot * drag.start_rotation;
+            transform.rotation = parent_global.map_or(world_rotation, |parent| {
+                parent.rotation().inverse() * world_rotation
+            });
         }
     }
+}
+
+fn world_vector_to_local(parent: Option<&GlobalTransform>, world_vector: Vec3) -> Vec3 {
+    parent.map_or(world_vector, |parent| {
+        parent.affine().inverse().transform_vector3(world_vector)
+    })
 }
 
 fn snap_scale(base: f32, delta: f32, step: Option<f32>) -> f32 {
@@ -600,5 +616,26 @@ fn snap_scale(base: f32, delta: f32, step: Option<f32>) -> f32 {
 pub fn end_drag(buttons: Res<ButtonInput<MouseButton>>, mut state: ResMut<TransformGizmoState>) {
     if buttons.just_released(MouseButton::Left) {
         state.drag = None;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn world_drag_delta_is_converted_to_parent_local_space() {
+        let parent = GlobalTransform::from(
+            Transform::from_xyz(10_000.0, -2_000.0, 300.0)
+                .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2))
+                .with_scale(Vec3::splat(2.0)),
+        );
+        let world_delta = Vec3::new(6.0, 2.0, -4.0);
+        let local_delta = world_vector_to_local(Some(&parent), world_delta);
+
+        assert!(parent
+            .affine()
+            .transform_vector3(local_delta)
+            .abs_diff_eq(world_delta, 1.0e-5));
     }
 }

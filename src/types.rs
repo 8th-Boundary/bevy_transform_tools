@@ -180,12 +180,16 @@ pub struct TransformGizmoDrag {
     pub plane_axis1: GizmoAxis,
     /// Second axis for planar snapping.
     pub plane_axis2: GizmoAxis,
-    /// The target's translation when the drag started.
+    /// The target's world-space translation when the drag started.
     pub start_translation: Vec3,
-    /// The target's rotation when the drag started.
+    /// The target's world-space rotation when the drag started.
     pub start_rotation: Quat,
-    /// The target's scale when the drag started.
+    /// The target's world-space scale when the drag started.
     pub start_scale: Vec3,
+    /// The target's parent-local translation when the drag started.
+    pub start_local_translation: Vec3,
+    /// The target's parent-local scale when the drag started.
+    pub start_local_scale: Vec3,
     /// Initial parameter value (distance or angle) at drag start.
     pub start_t: f32,
     /// Initial vector from origin to hit point (for planar/rotation ops).

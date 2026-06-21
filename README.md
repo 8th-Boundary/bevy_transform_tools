@@ -19,6 +19,7 @@ A transform gizmo plugin for [Bevy](https://bevyengine.org/) that provides inter
 
 | bevy_transform_tools version | Supported Bevy version |
 |-----------------------------|------------------------|
+| 0.3.0                       | 0.19.x                 |
 | 0.2.0                       | 0.18.x                 |
 | 0.1.0                       | 0.17.x                 |
 
@@ -26,7 +27,7 @@ A transform gizmo plugin for [Bevy](https://bevyengine.org/) that provides inter
 
 ```toml
 [dependencies]
-bevy_transform_tools = "0.2"
+bevy_transform_tools = "0.3"
 ```
 
 ## Quick Start
